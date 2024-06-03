@@ -23,7 +23,6 @@ const AudioRecorder = () => {
 	const [audioChunks, setAudioChunks] = useState([]);
 	const [convertedText, setConvertedText] = useState('');
     const [visible, setVisible] = useState(false);
-    const [everDisconnected, setEverDisconnected] = useState(false);
 
     
     useEffect(()=> {
@@ -35,9 +34,9 @@ const AudioRecorder = () => {
         async function storeOfflineData() {
           try {
             await localForage.setItem('offlineAudio', { content:audio });
-            // read data
-            const userData = await localForage.getItem('offlineAudio');
-            console.log(userData);
+            // read data and @ todo use any 3rd-party API to convert audio blob to text
+            const audioData = await localForage.getItem('offlineAudio');
+            console.log('savedData', audioData)
           } catch (err) {
             // error handling
             console.error(err);
@@ -46,7 +45,6 @@ const AudioRecorder = () => {
         storeOfflineData();
       }, []);
 
-     
     
 	const getMicrophonePermission = async () => {
 		if ("MediaRecorder" in window) {
@@ -121,7 +119,6 @@ const AudioRecorder = () => {
         recognition.lang = 'en-US';
         
         recognition.onresult=function(event) {
-            console.log(event)
             let result = '';
             for(let i = event.resultIndex;i <= event.resultIndex; i++) {
                 if (event.results[i].isFinal) {
@@ -131,15 +128,15 @@ const AudioRecorder = () => {
             const text = ifResume? convertedText + result : result;
             setConvertedText(text);
         }
-        recognition.onend= function() {
-            console.log('disconnect')
-        }
+        
         recognition.start();
     }
 
     async function storeOfflineData() {
         try {
           await localForage.setItem('offlineAudio', { content:audio });
+          console.log('audio saved into localForage')
+          console.log(audio)
           
         } catch (err) {
           // error handling
@@ -148,13 +145,13 @@ const AudioRecorder = () => {
     }
 
     async function transcribeOfflineData() {
-
         try {
           // read data
           const audioData = await localForage.getItem('offlineAudio');
           console.log(audioData)
           // convert audio to text
-          // due to limited time, 
+
+          // @todo due to limited time, 
           // use any 3rd-party API to convert audio blob to text 
           
         } catch (err) {
@@ -163,8 +160,15 @@ const AudioRecorder = () => {
         }
     }
 
-    window.addEventListener('online', transcribeOfflineData())
-    window.addEventListener('offline', storeOfflineData())
+    useEffect(() => {
+        window.addEventListener("offline", storeOfflineData())
+        window.addEventListener("online", transcribeOfflineData())
+        return () => {
+          window.removeEventListener("offline", storeOfflineData())
+          window.removeEventListener("online", transcribeOfflineData())
+        }
+    },[])
+    
 
 	return (
 		<div className="container">
