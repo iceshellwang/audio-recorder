@@ -1,16 +1,16 @@
 import { useState, useRef, useEffect } from "react";
-import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition';
 import './Recorder.css';
+import localForage from 'localforage';
+
 
 const mimeType = "audio/webm";
 
 const AudioRecorder = () => {
-    const {
-        transcript,
-        resetTranscript,
-      } = useSpeechRecognition();
+    // const {
+    //     transcript,
+    //     resetTranscript,
+    //   } = useSpeechRecognition();
     
-	const [permission, setPermission] = useState(false);
 
 	const mediaRecorder = useRef(null);
 
@@ -21,11 +21,33 @@ const AudioRecorder = () => {
 	const [audio, setAudio] = useState(null);
 
 	const [audioChunks, setAudioChunks] = useState([]);
+	const [convertedText, setConvertedText] = useState('');
+    const [visible, setVisible] = useState(false);
+    const [everDisconnected, setEverDisconnected] = useState(false);
 
+    
     useEffect(()=> {
         getMicrophonePermission()
     },[])
 
+    useEffect(() => {
+        // save data
+        async function storeOfflineData() {
+          try {
+            await localForage.setItem('offlineAudio', { content:audio });
+            // read data
+            const userData = await localForage.getItem('offlineAudio');
+            console.log(userData);
+          } catch (err) {
+            // error handling
+            console.error(err);
+          }
+        }
+        storeOfflineData();
+      }, []);
+
+     
+    
 	const getMicrophonePermission = async () => {
 		if ("MediaRecorder" in window) {
 			try {
@@ -36,7 +58,6 @@ const AudioRecorder = () => {
                     echoCancellation: false,
                     noiseSuppression: false
 				});
-				setPermission(true);
 				setStream(mediaStream);
 			} catch (err) {
 				alert(err.message);
@@ -64,7 +85,9 @@ const AudioRecorder = () => {
 		};
 
 		setAudioChunks(localAudioChunks);
-        SpeechRecognition.startListening();
+
+        // start to recognise audio
+        handleRecognition();
        
 	};
     
@@ -73,12 +96,14 @@ const AudioRecorder = () => {
     }
     const handleRecordingResume = () => {
 		mediaRecorder.current.resume();
+        handleRecognition(true);
     }
 
 	const handleRecordingStop = () => {
         if (recordingStatus !== "recording") {
             return;
         }
+        setVisible(true);
 		setRecordingStatus("inactive");
 		mediaRecorder.current.stop();
 
@@ -90,30 +115,56 @@ const AudioRecorder = () => {
 
 			setAudioChunks([]);
 		};
-        SpeechRecognition.stopListening();
 	};
-   
-    // const handleRecognition = () => {
-    //     const recognition = new window.webkitSpeechRecognition();
-    //     recognition.lang = 'en-US';
-    //     recognition.continuous = true;
-    //     recognition.interimResults = true;
-    //     recognition.start();
-    //     recognition.onresult=function(event) {
-    //         let result = ''
-    //         for(let i = event.resultIndex;i <= event.resultIndex; i++) {
-    //             if (event.results[i].isFinal) {
-    //                 result += event.results[i][0].transcript;
-    //             }
-    //         }
-    //         console.log(result,'res')
-    //         setConvertedText(result);
-    //     }
-    //      recognition.stop();
-    //      recognition.onend = function() {
-    //      console.log('disconnected')
-    //      }
-    // }
+    const handleRecognition = (ifResume = false) => {
+        const recognition = new window.webkitSpeechRecognition();
+        recognition.lang = 'en-US';
+        
+        recognition.onresult=function(event) {
+            console.log(event)
+            let result = '';
+            for(let i = event.resultIndex;i <= event.resultIndex; i++) {
+                if (event.results[i].isFinal) {
+                    result += event.results[i][0].transcript;
+                }
+            }
+            const text = ifResume? convertedText + result : result;
+            setConvertedText(text);
+        }
+        recognition.onend= function() {
+            console.log('disconnect')
+        }
+        recognition.start();
+    }
+
+    async function storeOfflineData() {
+        try {
+          await localForage.setItem('offlineAudio', { content:audio });
+          
+        } catch (err) {
+          // error handling
+          console.error(err);
+        }
+    }
+
+    async function transcribeOfflineData() {
+
+        try {
+          // read data
+          const audioData = await localForage.getItem('offlineAudio');
+          console.log(audioData)
+          // convert audio to text
+          // due to limited time, 
+          // use any 3rd-party API to convert audio blob to text 
+          
+        } catch (err) {
+          // error handling
+          console.error(err);
+        }
+    }
+
+    window.addEventListener('online', transcribeOfflineData())
+    window.addEventListener('offline', storeOfflineData())
 
 	return (
 		<div className="container">
@@ -135,9 +186,14 @@ const AudioRecorder = () => {
             {audio ? (
                 <div className="audio-player">
                     <audio src={audio} controls />
-                    <div className="transcribed-text">
-                        {transcript}
-                    </div>
+                    {visible &&
+                        <div className="transcribed-text">
+                            <div className="title">Transcript</div>
+                            <div>
+                                {convertedText}
+                            </div>
+                        </div>
+                    }
                 </div>
 				) : null}
 		</div>
